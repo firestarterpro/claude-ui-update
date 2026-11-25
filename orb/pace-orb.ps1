@@ -100,6 +100,8 @@ Add-Type -Namespace PaceOrb -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
 [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int max);
 public struct POINT { public int X; public int Y; public POINT(int x, int y) { X = x; Y = y; } }
 '@
 
@@ -353,7 +355,17 @@ function Test-OnTop {
   if ($script:Hwnd -eq [IntPtr]::Zero -or -not $win.IsVisible) { return 'hidden' }
   $b = Get-ScreenBox
   $hit = [PaceOrb.Win]::WindowFromPoint([PaceOrb.Win+POINT]::new($b.X + [int]($b.OrbW / 2), $b.Y + [int]($b.OrbW / 2)))
-  if ([PaceOrb.Win]::GetAncestor($hit, 2) -eq $script:Hwnd) { 'yes' } else { 'covered' }
+  $top = [PaceOrb.Win]::GetAncestor($hit, 2)
+  if ($top -eq $script:Hwnd) { return 'yes' }
+  # Name what covers it, so the log says which window wins (e.g. a toast or a tray flyout).
+  $who = 'unknown'
+  try {
+    $procId = [uint32]0; [void][PaceOrb.Win]::GetWindowThreadProcessId($top, [ref]$procId)
+    $cls = New-Object System.Text.StringBuilder 128; [void][PaceOrb.Win]::GetClassName($top, $cls, 128)
+    $pn = try { (Get-Process -Id $procId -ErrorAction Stop).ProcessName } catch { "pid$procId" }
+    $who = '{0}/{1}' -f $pn, $cls.ToString()
+  } catch { }
+  'covered(' + ($who -replace '\s', '_') + ')'
 }
 function Set-TopMost {
   if ($script:Hwnd -ne [IntPtr]::Zero -and $win.IsVisible -and -not $menu.IsOpen) { [void][PaceOrb.Win]::SetWindowPos($script:Hwnd, [IntPtr](-1), 0, 0, 0, 0, 0x0013) }
