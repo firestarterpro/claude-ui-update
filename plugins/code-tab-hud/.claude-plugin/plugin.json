@@ -1,0 +1,6 @@
+{
+  "name": "code-tab-hud",
+  "version": "0.1.0",
+  "description": "Meter strip for the Code tab: context, prompt cache, 5h and 7d limits, with toasts and an edge tint",
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "claude-ui-update",
+  "owner": { "name": "firestarterpro" },
+  "plugins": [
+    {
+      "name": "code-tab-hud",
+      "source": "./plugins/code-tab-hud",
+      "description": "Meter strip for the Claude desktop Code tab: context zones, prompt-cache countdown, 5h and 7d limits with pace, toasts and an edge tint"
+    }
+  ]
+}
