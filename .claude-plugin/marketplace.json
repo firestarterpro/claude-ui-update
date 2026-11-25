@@ -1,11 +1,13 @@
 {
   "name": "claude-ui-update",
-  "owner": { "name": "firestarterpro" },
+  "owner": {
+    "name": "firestarterpro"
+  },
   "plugins": [
     {
       "name": "code-tab-hud",
       "source": "./plugins/code-tab-hud",
-      "description": "Meter strip for the Claude desktop Code tab: context zones, prompt-cache countdown, 5h and 7d limits with pace, toasts and an edge tint"
+      "description": "HUD for the Claude desktop Code tab: usage strip with pace, All chats list, project chips and drawer, activity line, usage history, effort picker, alerts and an edge tint"
     }
   ]
 }

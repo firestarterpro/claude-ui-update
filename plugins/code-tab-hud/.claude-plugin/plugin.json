@@ -1,6 +1,9 @@
 {
   "name": "code-tab-hud",
-  "version": "0.2.0",
-  "description": "Meter strip for the Code tab: context, prompt cache, 5h and 7d limits, with toasts and an edge tint",
-  "types": "./types/index.d.ts"
+  "version": "1.0.0",
+  "description": "Code tab HUD: usage strip, All chats list, project chips and drawer, activity line, usage history, effort picker, alerts and an edge tint",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "firestarterpro"
+  }
 }
