@@ -198,7 +198,7 @@ const applyTint = async ($: EngineInterface): Promise<void> => {
       await $.theme.clear()
     } else {
       await $.theme.set({
-        backdrop: { scene: want, glass: { blur: 16, opacity: 0.55 } },
+        backdrop: { scene: want, glass: GLASS },
       })
     }
   } finally {
@@ -360,7 +360,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const els = $.ui.resolve(e)
-    const { Box, Button, Text } = els
+    const { Box, Button, Link, Text } = els
     const Svg = 'Svg' in els ? els.Svg : undefined
     const m = await read($, meter)
     const t = Math.max(await read($, now), await $.clock.now())
@@ -370,46 +370,52 @@ export const register: Register = on => {
     const probed = await read($, probe)
     const cols = e.props.bodyColumns
 
-    const settings = (
+    const toggle = (
       <Button
         key="settings"
         plain
-        label={isOpen ? 'Done' : '⚙'}
+        label={isOpen ? '−' : '+'}
         onPress={() => update($, showSettings, v => !v)}
       />
     )
-    const settingsRow = isOpen && (
-      <Box flexDirection="row" gap="sm" flexWrap="wrap">
-        <Text dimColor>Toasts:</Text>
-        <Button
-          key="t-context"
-          plain
-          label={`${p.toastContext ? '☑' : '☐'} context 80%`}
-          onPress={() => togglePref($, 'toastContext')}
-        />
-        <Button
-          key="t-pace"
-          plain
-          label={`${p.toastPace ? '☑' : '☐'} ahead of pace`}
-          onPress={() => togglePref($, 'toastPace')}
-        />
-        <Button
-          key="t-stale"
-          plain
-          label={`${p.toastStale ? '☑' : '☐'} stale data`}
-          onPress={() => togglePref($, 'toastStale')}
-        />
-        <Text dimColor>Look:</Text>
-        <Button
-          key="t-tint"
-          plain
-          label={`${p.tint ? '☑' : '☐'} edge tint`}
-          onPress={() => togglePref($, 'tint')}
-        />
+    const check = (isOn: boolean) => (isOn ? '☑' : '☐')
+    const settingsRows = isOpen && (
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap="sm" flexWrap="wrap">
+          <Text dimColor>Pop-up alerts when:</Text>
+          <Button
+            key="t-context"
+            plain
+            label={`${check(p.toastContext)} this chat passes 80%`}
+            onPress={() => togglePref($, 'toastContext')}
+          />
+          <Button
+            key="t-pace"
+            plain
+            label={`${check(p.toastPace)} 5h or 7d use runs ahead of pace`}
+            onPress={() => togglePref($, 'toastPace')}
+          />
+          <Button
+            key="t-stale"
+            plain
+            label={`${check(p.toastStale)} figures are 10 min old`}
+            onPress={() => togglePref($, 'toastStale')}
+          />
+        </Box>
+        <Box flexDirection="row" gap="sm" flexWrap="wrap">
+          <Text dimColor>Window glow:</Text>
+          <Button
+            key="t-tint"
+            plain
+            label={`${check(p.tint)} amber from 60%, orange from 80%`}
+            onPress={() => togglePref($, 'tint')}
+          />
+          <Button key="preview" plain label="Preview 8s" onPress={() => previewTint($)} />
+          <Link href={GUIDE_URL}>Guide</Link>
+        </Box>
         <Text dimColor>
-          Desktop tools: {probed === null ? 'not checked yet' : probed.isOk ? `✓ ${probed.note}` : `✗ ${probed.note}`}
+          Desktop tools {probed === null ? '…' : probed.isOk ? '✓' : `✗ ${probed.note}`} · width {cols}
         </Text>
-        <Text dimColor>Width: {cols} cols</Text>
       </Box>
     )
 
@@ -417,10 +423,10 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Box flexDirection="row" gap="sm">
-            <Text dimColor>Usage: waiting for this chat's first reply</Text>
-            {settings}
+            <Text dimColor>Usage shows after this chat's first reply</Text>
+            {toggle}
           </Box>
-          {settingsRow}
+          {settingsRows}
         </Box>
       )
     }
@@ -428,118 +434,100 @@ export const register: Register = on => {
     const age = t - m.measuredAt
     const isFaded = age > STALE_MS
     const z = zoneOf(m.ctxPct)
-    const zoneColor = isFaded ? undefined : z?.color
     const cacheLeft = replyAt === null ? undefined : CACHE_MS - (t - replyAt)
     const fivePace = m.five ? paceOf(m.five, FIVE_MS, t) : null
     const sevenPace = m.seven ? paceOf(m.seven, SEVEN_MS, t) : null
     const isEdge = p.tint && z !== null && (m.ctxPct ?? 0) >= 60
 
-    const ctxTitle =
-      m.ctxPct === undefined
-        ? 'Context: no reading yet'
-        : `Context ${m.ctxPct}% of ${Math.round(m.ctxWindow / 1000)}k tokens. Ticks at 60 and 80.`
-    const cacheTitle =
-      cacheLeft === undefined
-        ? 'Prompt cache: no reply seen yet'
-        : cacheLeft > 0
-          ? `Prompt cache warm for about ${dur(cacheLeft)} more (estimate)`
-          : 'Prompt cache likely expired: the next reply rereads the whole chat'
+    // One unit per meter: it wraps whole, never cut. Order: this chat first,
+    // then the account's limits; a unit in trouble moves to the front.
+    type Unit = { id: string; level: number; color: string | undefined; parts: string[]; tip: string; bar?: string }
+    const units: Unit[] = []
 
-    const limit = (label: string, w: LimitWindow | undefined, pace: Pace | null) => {
-      if (w === undefined) return null
-      const color = isFaded
-        ? undefined
-        : w.pct >= 90
-          ? SERIOUS
-          : pace?.isAhead || w.pct >= 75
-            ? WARN
-            : undefined
-      const mark = pace?.isAhead ? '▲ ' : ''
+    const ctxLevel = m.ctxPct === undefined ? 0 : m.ctxPct >= 80 ? 2 : m.ctxPct >= 60 ? 1 : 0
+    units.push({
+      id: 'ctx',
+      level: ctxLevel,
+      color: z?.color,
+      parts: z ? [`${z.glyph} ${m.ctxPct}%`, ...(cols >= 60 ? [z.name] : [])] : ['chat –'],
+      tip:
+        m.ctxPct === undefined
+          ? 'This chat: no reading yet'
+          : `This chat has used ${m.ctxPct}% of its ${Math.round(m.ctxWindow / 1000)}k context. Marks at 60 and 80.`,
+      bar: Svg && barSvg(m.ctxPct ?? 0, z?.color ?? TRACK, [60, 80], undefined, isFaded, 'This chat'),
+    })
 
-      return (
-        <Box flexDirection="row" gap="xs" alignItems="center">
-          {Svg ? (
-            <Svg
-              source={barSvg(
-                w.pct,
-                color ?? THINK,
-                [],
-                pace?.elapsed,
-                isFaded,
-                `${label} limit ${w.pct}%${pace ? `, ${Math.round(pace.elapsed * 100)}% of the window gone, ${pace.tail}` : ''}`,
-              )}
-              alt={`${label} limit ${w.pct}%`}
-              width={88}
-              height={12}
-              isInteractive
-            />
-          ) : (
-            <Text dimColor>{textBar(w.pct)}</Text>
-          )}
-          <Text color={color} dimColor={isFaded} wrap="truncate-end" maxLines={1}>
-            {mark}
-            {label} {w.pct}%
-          </Text>
-          {cols >= 80 && pace && (
-            <Text dimColor wrap="truncate-end" maxLines={1}>
-              {pace.tail}
-            </Text>
-          )}
-        </Box>
-      )
+    if (cacheLeft !== undefined) {
+      units.push({
+        id: 'cache',
+        level: 0,
+        color: undefined,
+        parts: [cacheLeft > 0 ? `cache ${dur(cacheLeft)}` : 'cache cold'],
+        tip:
+          cacheLeft > 0
+            ? `Prompt cache warm about ${dur(cacheLeft)} more: replying before then is cheaper (estimate)`
+            : 'Prompt cache likely expired: the next reply rereads the whole chat',
+        bar: Svg && ringSvg(cacheLeft, isFaded, 'Prompt cache'),
+      })
     }
 
+    const limitUnit = (id: string, label: string, w: LimitWindow | undefined, pace: Pace | null) => {
+      if (w === undefined) return
+      const fills = pace?.tail.startsWith('full') ?? false
+      const level = w.pct >= 90 || (fills && pace?.isAhead) ? 2 : pace?.isAhead || w.pct >= 75 ? 1 : 0
+      const color = level === 2 ? SERIOUS : level === 1 ? WARN : undefined
+      const word = pace === null ? '' : fills ? `fills ${pace.tail.replace('full in ', '')}` : `resets ${pace.tail.replace('resets in ', '')}`
+      units.push({
+        id,
+        level,
+        color,
+        parts: [`${level > 0 ? '▲ ' : ''}${label} ${w.pct}%`, ...(cols >= 80 && word !== '' ? [word] : [])],
+        tip: `${label} plan limit: ${w.pct}% used${pace ? `, ${Math.round(pace.elapsed * 100)}% of the window gone, ${pace.tail}` : ''}`,
+        bar: Svg && barSvg(w.pct, color ?? THINK, [], pace?.elapsed, isFaded, `${label} limit`),
+      })
+    }
+    limitUnit('five', '5h', m.five, fivePace)
+    limitUnit('seven', '7d', m.seven, sevenPace)
+
+    const ordered = [...units].sort((a, b) => b.level - a.level)
+
     const row = (
-      <Box flexDirection="row" gap="sm" alignItems="center" flexWrap="nowrap">
-        <Box flexDirection="row" gap="xs" alignItems="center">
-          {Svg ? (
-            <Svg
-              source={barSvg(m.ctxPct ?? 0, z?.color ?? TRACK, [60, 80], undefined, isFaded, ctxTitle)}
-              alt={ctxTitle}
-              width={88}
-              height={12}
-              isInteractive
-            />
-          ) : (
-            <Text dimColor>{textBar(m.ctxPct ?? 0)}</Text>
-          )}
-          <Text color={zoneColor} dimColor={isFaded} bold maxLines={1}>
-            {z ? `${z.glyph} ${m.ctxPct}%` : 'ctx –'}
-          </Text>
-          {cols >= 70 && z && (
-            <Text color={zoneColor} dimColor={isFaded} maxLines={1}>
-              {z.name}
+      <Box flexDirection="row" gap="md" alignItems="center" flexWrap="wrap">
+        {ordered.map(u => (
+          <Box
+            key={u.id}
+            flexDirection="row"
+            gap="xs"
+            alignItems="center"
+            flexShrink={0}
+            paddingX={u.level === 2 ? 'xs' : 0}
+            backgroundColor={u.level === 2 && !isFaded ? HIGHLIGHT : undefined}
+          >
+            {Svg && u.bar !== undefined ? (
+              <Svg
+                source={u.bar}
+                alt={u.tip}
+                width={u.id === 'cache' ? 12 : 48}
+                height={12}
+                isInteractive
+              />
+            ) : null}
+            <Text
+              color={isFaded ? undefined : u.color}
+              dimColor={isFaded || (u.color === undefined && u.id === 'cache')}
+              bold={u.level > 0 || u.id === 'ctx'}
+            >
+              {u.parts[0]}
             </Text>
-          )}
-        </Box>
-        <Box flexDirection="row" gap="xs" alignItems="center">
-          {Svg && cacheLeft !== undefined && (
-            <Svg
-              source={ringSvg(cacheLeft, isFaded, cacheTitle)}
-              alt={cacheTitle}
-              width={12}
-              height={12}
-              isInteractive
-            />
-          )}
-          {cols >= 85 && (
-            <Text dimColor maxLines={1}>
-              {cacheLeft === undefined ? 'cache –' : cacheLeft > 0 ? `cache ${dur(cacheLeft)}` : 'cache cold'}
-            </Text>
-          )}
-        </Box>
-        {limit('5h', m.five, fivePace)}
-        {limit('7d', m.seven, sevenPace)}
-        {cols >= 120 && m.model !== undefined && (
-          <Text dimColor maxLines={1} wrap="truncate-end">
-            {m.model}
-          </Text>
-        )}
-        {isFaded && (
-          <Text dimColor maxLines={1}>
-            {dur(age)} old
-          </Text>
-        )}
+            {u.parts.length > 1 && (
+              <Text color={isFaded ? undefined : u.color} dimColor={isFaded || u.level === 0}>
+                {u.parts[1]}
+              </Text>
+            )}
+          </Box>
+        ))}
+        {cols >= 120 && m.model !== undefined && <Text dimColor>{m.model}</Text>}
+        {isFaded && <Text dimColor>{dur(age)} old</Text>}
         {(m.ctxPct ?? 0) >= 80 && (
           <Button
             key="handoff"
@@ -548,20 +536,58 @@ export const register: Register = on => {
             onPress={() => $.prompt.submit({ text: HANDOFF_PROMPT })}
           />
         )}
-        {settings}
+        {toggle}
       </Box>
     )
 
-    return isEdge ? (
+    return isEdge && z !== null ? (
       <Box flexDirection="column" borderStyle="round" borderColor={z.color}>
         {row}
-        {settingsRow}
+        {settingsRows}
       </Box>
     ) : (
       <Box flexDirection="column">
         {row}
-        {settingsRow}
+        {settingsRows}
       </Box>
     )
   })
+}
+
+const GUIDE_URL = 'https://github.com/firestarterpro/claude-ui-update/blob/main/GUIDE.md'
+const HIGHLIGHT = '#f18a5933'
+const GLASS = { blur: 16, opacity: 0.45 }
+
+// Shows the orange glow for 8 seconds, then puts back what the chat's
+// context calls for.
+const previewTint = async ($: EngineInterface): Promise<void> => {
+  if ((await read($, tint)) === 'yielded') {
+    $.ui.toast('Another mod set this chat\'s look, so the glow stays off here.')
+
+    return
+  }
+  isOwnSet = true
+  try {
+    await $.theme.set({ backdrop: { scene: 'edge-80', glass: GLASS } })
+  } finally {
+    isOwnSet = false
+  }
+  $.clock.after(8_000, () => {
+    void restoreTint($)
+  })
+}
+
+const restoreTint = async ($: EngineInterface): Promise<void> => {
+  const current = await read($, tint)
+  if (current === 'yielded') return
+  isOwnSet = true
+  try {
+    if (current === 'none') {
+      await $.theme.clear()
+    } else {
+      await $.theme.set({ backdrop: { scene: current, glass: GLASS } })
+    }
+  } finally {
+    isOwnSet = false
+  }
 }

@@ -77,8 +77,8 @@ test('82% context: zone, handoff button, toasts, orange tint', async ($, on) => 
     const ui = await $.ui.mount({ ...BAND, surface })
     expect((await ui.find({ type: 'Text', text: /◆ 82%/ }))?.text).toBe('◆ 82%')
     expect((await ui.find({ type: 'Text', text: /Hand off/ }))?.text).toBe('Hand off')
-    expect((await ui.find({ type: 'Text', text: /full in ~1h46m/ }))?.text).toBe(
-      'full in ~1h46m',
+    expect((await ui.find({ type: 'Text', text: /fills ~1h46m/ }))?.text).toBe(
+      'fills ~1h46m',
     )
     expect((await ui.find({ type: 'Text', text: /cache 5m/ }))?.text).toBe('cache 5m')
     await ui.press({ key: 'handoff' })
@@ -120,9 +120,9 @@ test('narrow band drops secondary text first', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.session.measure(MEASURE)
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 60 } })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 50 } })
   expect(await ui.find({ type: 'Text', text: /Hand off/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /full in/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /fills/ })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /◆ 82%/ }))?.text).toBe('◆ 82%')
   await ui.unmount()
 })
@@ -138,7 +138,7 @@ test('settings row toggles the tint off and saves it', async ($, on) => {
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.press({ key: 'settings' })
   await ui.press({ key: 't-tint' })
-  expect((await ui.find({ key: 't-tint' }))?.text).toContain('☐ edge tint')
+  expect((await ui.find({ key: 't-tint' }))?.text).toContain('☐ amber from 60%')
   expect(seen.scenes).toEqual(['edge-80'])
   await ui.unmount()
 })

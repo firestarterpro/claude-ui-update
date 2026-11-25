@@ -4,7 +4,9 @@ Mods for the Claude desktop app's Code tab, built for a portrait monitor (about 
 
 ## Mods
 
-### code-tab-hud (v0.1.0)
+### code-tab-hud (v0.2.0)
+
+How to read it: [GUIDE.md](GUIDE.md).
 
 A one-line strip above the message box:
 
@@ -17,6 +19,19 @@ A one-line strip above the message box:
 - **Edge tint**: amber window edge from 60% context, orange from 80%, with an off switch.
 
 The limit figures exist only on Pro and Max plans, after the chat's first reply.
+
+## Status of the v1 plan
+
+| # | Feature | Status |
+| --- | --- | --- |
+| 1 | Meter strip (context, cache, 5h, 7d) | ✅ v0.2.0 |
+| 7 | Pop-up alerts | ✅ context 80%, ahead of pace, stale. "Chat needs you" waits for item 11 |
+| 8 | Window glow | ✅ plus a preview button; visibility on desktop still being checked |
+| 11 | All chats list | Next. The data source works (`list_sessions`) |
+| 2, 3 | Project chips, projects drawer | After 11 |
+| 4, 5, 6 | Activity line, terminal row, usage history | Later |
+| 10 | Effort picker | Later (beside the message box, not inside it) |
+| 9 | Tray icon | Separate Windows program, later |
 
 ## Install
 
